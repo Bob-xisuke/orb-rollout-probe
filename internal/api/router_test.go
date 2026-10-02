@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/luwa07832/feature-flag-service/internal/store"
+	"github.com/Bob-xisuke/orb-rollout-probe/internal/store"
 )
 
 func TestHealthzReportsOK(t *testing.T) {
