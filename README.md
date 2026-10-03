@@ -38,6 +38,44 @@ go run .
 {"error":{"code":"storage_unavailable","message":"database is not available"}}
 ```
 
+### `POST /v1/rollouts`
+
+登记一次滚动升级。请求体为单个 JSON 对象，字段如下：
+
+| 字段 | 说明 |
+|---|---|
+| `namespace`、`workload`、`targetVersion` | 非空字符串，三元组唯一确定一条记录 |
+| `batchSize` | 正整数，批次总数 |
+| `maxUnavailableRatio` | 闭区间 `[0, 1]` 内的数字 |
+| `completedBatches` | `0` 到 `batchSize`（含）之间的整数，缺省为 `0` |
+| `probe` | 必填，须完整提供 `type`、`path`、`port`（1–65535）、`timeoutSeconds`、`successThreshold`、`failureThreshold`（三个阈值为正整数） |
+| `probeResults` | 每项含 `batch`、`ready`、`failedPods`；失败项可带 `reason` |
+| `rollback` | 布尔值 |
+
+行为约定：
+
+- 首次有效提交：单事务写入，返回 201，响应体为稳定 `id` 加完整记录。
+- 同三元组、内容完全相同的重复提交：不新增也不改写，返回 200 与首次记录（JSON 空白与键顺序不影响内容比较）。
+- 同三元组但内容不同：返回 409，`code` 为 `RolloutConflictError`。
+- 记录创建后不可修改或删除；服务不提供 PUT/PATCH/DELETE 入口。
+- 并发提交由唯一键与事务保证最多一行，读取只看到已提交的快照。
+
+### `GET /v1/rollouts`
+
+以 `namespace`、`workload`、`targetVersion` 三个查询参数精确查询：
+
+- 命中返回 200 与完整记录。
+- 无记录返回 404，`code` 为 `RolloutNotFoundError`。
+- 任一参数缺失或留空返回 400，`code` 为 `InvalidRolloutInputError`。
+
 ## 错误约定
 
 所有错误响应都是单个顶层 `error` 对象，包含 `code` 与 `message` 两个字符串字段；`message` 不包含 SQL、堆栈或文件路径。
+
+新增入口使用的错误码：
+
+| HTTP | code | 场景 |
+|---|---|---|
+| 400 | `InvalidRolloutInputError` | 提交 JSON 非法、字段缺失/不完整或取值越界；GET 查询参数缺失或留空 |
+| 404 | `RolloutNotFoundError` | 三元组无已提交记录 |
+| 409 | `RolloutConflictError` | 三元组已存在但提交内容不同 |
